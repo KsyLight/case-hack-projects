@@ -1,5 +1,8 @@
 # Route Project
 
+## Структура
+- <a href="https://github.com/KsyLight/case-hack-projects/blob/main/route-project/UI-%D0%B4%D0%B8%D0%B7%D0%B0%D0%B9%D0%BD.png">UI-дизайн
+
 ## Предварительные действия - клонирование папки репозитория
 
 **Важно иметь установленный Git. Если он отсутствует, необходимо установить.**
