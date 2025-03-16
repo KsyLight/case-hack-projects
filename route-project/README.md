@@ -3,7 +3,7 @@
 Предварительные действия - клонирование репозитория:
 
 1. Задаем папку клонирования `cd path/to/your/folder`
-2. Запускаем команду клонирования `git clone https://github.com/username/repository-name.git`
+2. Запускаем команду клонирования `git clone https://github.com/KsyLight/case-hack-projects/tree/main/route-project`
 3. Переходим в папку репозитория `cd repository-name` или `cd путь к папке`
 
 Основные действия:
