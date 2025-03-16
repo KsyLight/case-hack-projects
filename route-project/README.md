@@ -68,6 +68,7 @@
    python route_planner.py
    ```
 - Открытие ноутбука в Jupyter Notebook (можно использовать любой другой IDE, открыв через него)
+
   - Запускаем Jupyter Notebook
 
   ```sh
