@@ -1,6 +1,13 @@
-# Порядок действий:
+**Порядок действия:**
 
-1. Создать окружение `python -m venv route_venv` (рекомендуется) и запустить окружение `route_venv\Scripts\activate`
-2. Загрузить зависимости `pip install -r requirements.txt`
-3. Запустить скрипт в командной строке `python route_planner.py`
-4. Далее вводим данные на основе запросов из консоли
+Предварительные действия - клонирование репозитория:
+
+1. Задаем папку клонирования `cd path/to/your/folder`
+2. Запускаем команду клонирования `git clone https://github.com/username/repository-name.git`
+3. Переходим в папку репозитория `cd repository-name` или `cd путь к папке`
+
+Основные действия:
+
+4. Создать окружение `python -m venv route_venv` (рекомендуется) и запустить окружение `route_venv\Scripts\activate`
+5. Загрузить зависимости `pip install -r requirements.txt`
+6. Запустить скрипт в командной строке `python route_planner.py`
