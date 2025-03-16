@@ -62,14 +62,13 @@
    pip install -r requirements.txt
    ```
 10. Далее есть два варианта: запустить скрипт или использовать ноутбук:
-- Запуск скрипта
+- Запуск скрипта:
 
   ```sh
    python route_planner.py
    ```
 - Открытие ноутбука в Jupyter Notebook (можно использовать любой другой IDE, открыв через него)
-
-  - Запускаем Jupyter Notebook
+  - Запускаем Jupyter Notebook:
 
   ```sh
    jupyter notebook notebook.ipynb
