@@ -68,12 +68,12 @@
    python route_planner.py
    ```
 - Открытие ноутбука в Jupyter Notebook (можно использовать любой другой IDE, открыв через него)
-  - Запускаем Jupyter Notebook:
+   - Запускаем Jupyter Notebook:
 
-  ```sh
-   jupyter notebook notebook.ipynb
-   ```
-  - Запускаем выполненние ноутбука
+     ```sh
+     jupyter notebook notebook.ipynb
+     ```
+   - Запускаем выполненние ноутбука
 10. Ввести запрашиваемые параметры и дождаться результата.
 
 ## Дополнительная информация
