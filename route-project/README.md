@@ -1,24 +1,25 @@
 # Route Project
 
-## Предварительные действия - клонирование репозитория
+## Предварительные действия - клонирование папки репозитория
 
 **Важно иметь установленный Git. Если он отсутствует, необходимо установить.**
 
 1. Открыть терминал или командную строку.
-2. Перейти в папку, куда будет клонирован репозиторий:
+2. Перейти в папку, куда будет клонирован проект:
    ```sh
    cd path/to/your/folder
    ```
    *(Замените `path/to/your/folder` на ваш путь)*
-3. Клонировать репозиторий:
+3. Клонировать только папку `route-project` из репозитория:
    ```sh
-   git clone https://github.com/KsyLight/case-hack-projects
+   git clone --depth 1 --filter=blob:none --sparse https://github.com/KsyLight/case-hack-projects.git
+   cd case-hack-projects
+   git sparse-checkout set route-project
    ```
 4. Перейти в папку проекта:
    ```sh
-   cd case-hack-projects/route-project
+   cd route-project
    ```
-   *(Или использовать свой путь к папке `route-project`)*
 
 ## Основные действия
 
@@ -54,3 +55,4 @@
 - Для выхода из виртуального окружения выполните команду:
   ```sh
   deactivate
+  ```
