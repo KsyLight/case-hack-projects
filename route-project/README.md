@@ -4,7 +4,7 @@
 
 1. Задаем папку клонирования `cd path/to/your/folder`
 2. Запускаем команду клонирования `git clone https://github.com/KsyLight/case-hack-projects/tree/main/route-project`
-3. Переходим в папку репозитория `cd repository-name` или `cd путь к папке`
+3. Переходим в папку репозитория `cd route-project` или `cd путь к папке route-project`. Путь можно узнать, нажав правой кнопкой на папку в проводнике и нажать кнопку скопировать, а дальше вставить его после `cd`
 
 Основные действия:
 
