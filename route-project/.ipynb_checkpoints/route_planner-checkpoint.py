@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 from time import sleep
 
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Конфигурация и логирование
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s"
@@ -23,24 +23,71 @@ logger = logging.getLogger("RouteSystem")
 STATIONS_CACHE_JSON = "stations_list.json"
 STATIONS_CACHE_CSV = "stations_list.csv"
 
-# API-ключ для Яндекс.Расписаний (замените на свой реальный ключ)
+# API-ключи (замените на свои реальные ключи)
 YANDEX_RASP_API_KEY = "2a22163d-023f-47db-a974-6d683c413a83"
+AVIASALES_TOKEN = "dbd789b8fa1dadd43c5376abdcba15a0"
 
-# URL для методов
+# Пример эндпоинта для Aviasales (Travelpayouts)
+AVIASALES_API_URL = "https://api.travelpayouts.com/v2/prices/latest"
+
+# URL для Яндекс.Расписаний
 URL_STATIONS_LIST = "https://api.rasp.yandex.net/v3.0/stations_list"
 URL_SEARCH = "https://api.rasp.yandex.net/v3.0/search/"
 
 # Файл с выбранными узлами (при интерактивном выборе)
 SELECTED_NODES_FILE = "selected_nodes.json"
 
-# Минимальное время пересадки (штраф)
-MIN_TRANSFER_TIME = 1800  # 30 минут (секунд)
+# Минимальное время пересадки (в секундах)
+MIN_TRANSFER_TIME = 1800  # 30 минут
 
-# -----------------------------------------------------------------------------
+# Карта соответствия кодов Яндекс → IATA (пример, заполните по необходимости)
+YANDEX_TO_IATA_MAP = {
+    "s9600370": "SVO",  # Шереметьево
+    "s9600363": "VKO",  # Внуково
+    # Добавьте остальные соответствия...
+}
+
+# -------------------------------------------------------------------------
+# Функция для получения цены перелёта из Aviasales
+# -------------------------------------------------------------------------
+def get_aviasales_price(origin_iata: str, destination_iata: str, departure_date: str) -> float:
+    """
+    Обращается к Aviasales API для получения цены на рейс origin->destination с датой departure_date.
+    Возвращает стоимость в формате float или None, если данные недоступны.
+    """
+    try:
+        params = {
+            "origin": origin_iata,
+            "destination": destination_iata,
+            "departure_at": departure_date,  # формат YYYY-MM-DD
+            "one_way": "true",              # используем one-way запрос
+            "currency": "RUB",
+            "token": AVIASALES_TOKEN,
+            "limit": 1,       # запрашиваем только 1 самый дешевый вариант
+            "sorting": "price"
+        }
+        logger.info(f"Запрашиваем Aviasales для {origin_iata}->{destination_iata} на {departure_date}")
+        resp = requests.get(AVIASALES_API_URL, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        # Предполагаем, что данные содержатся в data["data"] — массив предложений
+        tickets = data.get("data", [])
+        if not tickets:
+            return None
+        first_ticket = tickets[0]
+        price_value = first_ticket.get("price")
+        if price_value:
+            return float(price_value)
+        return None
+    except Exception as e:
+        logger.error(f"Ошибка при запросе цены у Aviasales: {e}")
+        return None
+
+# -------------------------------------------------------------------------
 # Модуль 1: Загрузка и кэширование данных станций
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 def fetch_stations_list_from_api(api_key: str) -> dict:
-    """Запрашивает список станций через API и возвращает JSON-словарь."""
+    """Запрашивает список станций через API Яндекс.Расписаний и возвращает JSON-словарь."""
     logger.info("Запрашиваем список станций из API Яндекс.Расписаний...")
     params = {
         "apikey": api_key,
@@ -56,29 +103,21 @@ def fetch_stations_list_from_api(api_key: str) -> dict:
 def stations_to_dataframe(stations_json: dict) -> pd.DataFrame:
     """
     Преобразует вложенную структуру (страны → регионы → населённые пункты → станции)
-    в плоский DataFrame с дополнительными полями: country_title, region_title, settlement_title.
-    Если у станции отсутствует поле 'type', устанавливает его в 'station'.
+    в плоский DataFrame. Здесь для простоты берём все станции.
     """
     stations_list = []
     for country in stations_json.get("countries", []):
-        country_title = country.get("title", "")
         for region in country.get("regions", []):
-            region_title = region.get("title", "")
             for settlement in region.get("settlements", []):
-                settlement_title = settlement.get("title", "")
                 for station in settlement.get("stations", []):
-                    station["country_title"] = country_title
-                    station["region_title"] = region_title
-                    station["settlement_title"] = settlement_title
-                    if "type" not in station:
-                        station["type"] = "station"
+                    # Можно добавить дополнительные поля (например, title населённого пункта)
                     stations_list.append(station)
     df = pd.json_normalize(stations_list)
     return df
 
 def load_stations_dataframe() -> (pd.DataFrame, dict):
     """
-    Если кэш (CSV и JSON) существует, загружает данные. Иначе – запрашивает через API и сохраняет.
+    Если кэш существует, загружает данные, иначе запрашивает через API и сохраняет.
     Возвращает DataFrame и исходный JSON.
     """
     if os.path.exists(STATIONS_CACHE_CSV) and os.path.exists(STATIONS_CACHE_JSON):
@@ -97,9 +136,9 @@ def load_stations_dataframe() -> (pd.DataFrame, dict):
         logger.info(f"Сохранён CSV‑кэш: {STATIONS_CACHE_CSV}")
     return df, stations_json
 
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Модуль 2: Выбор транспортных узлов (фильтрация станций)
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 def load_settlements_dataframe() -> pd.DataFrame:
     """Загружает DataFrame для населённых пунктов из JSON‑кэша."""
     if not os.path.exists(STATIONS_CACHE_JSON):
@@ -233,9 +272,9 @@ def select_transport_node(city: str, df_stations: pd.DataFrame, df_settlements: 
         node = get_city_code_automatic(df_settlements, city, df_stations)
     return update_node_code(node, city)
 
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Функция интерактивного ввода исходных данных
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 def input_route_parameters() -> dict:
     """
     Запрашивает у пользователя:
@@ -276,15 +315,15 @@ def input_route_parameters() -> dict:
         "work_info": work_info
     }
 
-# -----------------------------------------------------------------------------
-# Модуль 5: Получение вариантов маршрутов через API
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
+# Модуль 5: Получение вариантов маршрутов через API Яндекс.Расписаний
+# -------------------------------------------------------------------------
 def get_route_options(from_code: str, to_code: str, date: str,
                       transport_types: str = "plane,train,suburban,bus,water,helicopter",
                       transfers: str = "true", limit: int = 100, offset: int = 0) -> dict:
     """
     Отправляет запрос к API для получения вариантов маршрутов.
-    Если статус 404, возвращает пустой словарь.
+    Если статус 404 — возвращает пустой словарь.
     """
     params = {
         "apikey": YANDEX_RASP_API_KEY,
@@ -325,9 +364,9 @@ def save_route_options(route_data: dict, filename: str) -> None:
         df.to_csv(csv_name, index=False, encoding="utf-8")
         logger.info(f"CSV сохранён: {csv_name}")
 
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Модуль 6: Построение графа маршрутов и оптимизация
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 def combine_route_data(route_data_1: dict, route_data_2: dict, from_node: str, to_node: str) -> dict:
     """
     Объединяет сегменты двух запросов (например, A->X и X->B) в один словарь.
@@ -349,18 +388,24 @@ def combine_route_data(route_data_1: dict, route_data_2: dict, from_node: str, t
         }
     }
 
-def build_route_graph(route_data: dict, intermediate_node: str = None) -> nx.DiGraph:
+def build_route_graph(
+    route_data: dict,
+    intermediate_node: str = None,
+    ranking_param: str = "time"
+) -> nx.DiGraph:
     """
     Извлекает сегменты из route_data и строит ориентированный граф.
-    Если задан intermediate_node, то для сегментов query=2 с вылетом из него,
-    если интервал меньше MIN_TRANSFER_TIME, добавляется штраф.
+    Если сегмент — авиаперелёт, пытаемся получить стоимость через Aviasales.
+    Параметр ranking_param определяет, чем является вес ребра: временем или ценой.
+    Также исключаются сегменты с недостаточным временем пересадки.
     """
     G = nx.DiGraph()
     segments = route_data.get("segments", [])
     interval_segments = route_data.get("interval_segments", [])
     all_segments = segments + interval_segments
-    logger.info(f"Начало построения графа: найдено {len(all_segments)} сегментов (с учетом interval_segments)")
+    logger.info(f"Начало построения графа: найдено {len(all_segments)} сегментов")
 
+    # Если задан intermediate_node — ищем минимальное время прибытия для пересадки
     min_arrival = None
     if intermediate_node:
         for s in all_segments:
@@ -380,51 +425,78 @@ def build_route_graph(route_data: dict, intermediate_node: str = None) -> nx.DiG
 
     for s in all_segments:
         try:
-            from_st = s.get("from") or s.get("departure_from") or {}
-            to_st = s.get("to") or s.get("arrival_to") or {}
+            from_st = s.get("from") or {}
+            to_st = s.get("to") or {}
             from_code = from_st.get("code")
             to_code = to_st.get("code")
             if not from_code or not to_code:
                 continue
-            duration = s.get("duration")
-            if duration is None:
-                dep_str = s.get("departure")
-                arr_str = s.get("arrival")
-                if dep_str and arr_str:
-                    try:
-                        dep_dt = datetime.fromisoformat(dep_str)
-                        arr_dt = datetime.fromisoformat(arr_str)
-                        diff_sec = (arr_dt - dep_dt).total_seconds()
-                        if diff_sec < 0:
-                            continue
-                        duration = diff_sec
-                    except Exception:
-                        continue
-                else:
+
+            dep_str = s.get("departure")
+            arr_str = s.get("arrival")
+            if not dep_str or not arr_str:
+                continue
+
+            # Рассчитываем продолжительность (в секундах)
+            try:
+                dep_dt = datetime.fromisoformat(dep_str)
+                arr_dt = datetime.fromisoformat(arr_str)
+                duration = (arr_dt - dep_dt).total_seconds()
+                if duration < 0:
                     continue
+            except Exception:
+                continue
+
+            # Если есть промежуточный узел и это сегмент query=2,
+            # проверяем, достаточно ли времени для пересадки.
             if intermediate_node and s.get("query") == 2 and from_code == intermediate_node and min_arrival:
-                dep_str = s.get("departure")
-                if dep_str:
-                    try:
-                        dep_dt = datetime.fromisoformat(dep_str)
-                        gap = (dep_dt - min_arrival).total_seconds()
-                        if gap < MIN_TRANSFER_TIME:
-                            penalty = MIN_TRANSFER_TIME - gap
-                            logger.info(f"Добавляем штраф {penalty} сек для сегмента с отправлением {dep_str}")
-                            duration += penalty
-                    except Exception:
-                        pass
-            G.add_edge(from_code, to_code, weight=duration, segment=s)
+                gap = (dep_dt - min_arrival).total_seconds()
+                if gap < MIN_TRANSFER_TIME:
+                    logger.info(f"Исключаем сегмент из-за короткой пересадки: {gap} сек")
+                    continue
+
+            # Определяем транспортный тип и пытаемся получить стоимость для самолётов
+            cost_value = None
+            transport_type = ""
+            if "thread" in s:
+                transport_type = s["thread"].get("transport_type", "")
+            else:
+                transport_type = s.get("transport_type", "")
+
+            if transport_type == "plane":
+                iata_origin = YANDEX_TO_IATA_MAP.get(from_code)
+                iata_destination = YANDEX_TO_IATA_MAP.get(to_code)
+                if iata_origin and iata_destination:
+                    dep_date_str = dep_dt.strftime("%Y-%m-%d")
+                    cost_value = get_aviasales_price(iata_origin, iata_destination, dep_date_str)
+
+            # Определяем вес ребра
+            weight = duration
+            if ranking_param == "cost":
+                if cost_value is not None:
+                    weight = float(cost_value)
+                else:
+                    weight = 999999.0
+
+            G.add_edge(
+                from_code,
+                to_code,
+                weight=weight,
+                time=duration,
+                cost=cost_value,
+                segment=s
+            )
+
         except Exception as e:
             logger.error(f"Ошибка при обработке сегмента: {e}")
+
     logger.info(f"Граф построен: узлов={G.number_of_nodes()}, рёбер={G.number_of_edges()}")
     return G
 
 def find_k_shortest_paths(G: nx.DiGraph, source: str, target: str, k: int = 10) -> List[Tuple[List[str], float]]:
     """
-    Находит до k кратчайших путей от source до target.
-    Использует shortest_simple_paths (пути уже отсортированы по возрастанию веса).
-    Возвращает список кортежей (список узлов, суммарное время).
+    Находит до k кратчайших путей от source до target по весу ребра (weight).
+    Возвращает список кортежей: (список узлов, суммарное значение веса).
     """
     if source not in G or target not in G:
         logger.warning(f"Узел {source} или {target} отсутствует в графе.")
@@ -432,17 +504,17 @@ def find_k_shortest_paths(G: nx.DiGraph, source: str, target: str, k: int = 10) 
     paths_gen = shortest_simple_paths(G, source, target, weight="weight")
     results = []
     for path in paths_gen:
-        cost = 0
+        total_weight = 0
         for u, v in zip(path, path[1:]):
-            cost += G[u][v]["weight"]
-        results.append((path, cost))
+            total_weight += G[u][v]["weight"]
+        results.append((path, total_weight))
         if len(results) >= k:
             break
     return results
 
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 # Модуль 7: Формирование DataFrame с детализацией маршрута
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
 def format_duration(seconds: float) -> str:
     """Форматирует секунды в строку вида 'Xч Yм Zс'."""
     if seconds is None:
@@ -455,7 +527,7 @@ def format_duration(seconds: float) -> str:
 def build_optimal_route_dataframe(route: List[str], graph: nx.DiGraph, work_days: int = 0, route_id: int = 1) -> pd.DataFrame:
     """
     Создаёт DataFrame с детализацией маршрута:
-      - Маршрут_ID, Номер сегмента, коды отправления/прибытия, названия, времена, количество дней, время в пути, вид транспорта.
+      - Маршрут_ID, номер сегмента, коды отправления/прибытия, названия, времена, время в пути, тип транспорта и т.д.
     """
     rows = []
     for i in range(len(route) - 1):
@@ -494,17 +566,17 @@ def build_optimal_route_dataframe(route: List[str], graph: nx.DiGraph, work_days
             "Код прибытия": to_code,
             "Город прибытия": to_title,
             "Время прибытия": arr_time,
-            "Количество дней": work_days,
+            "Количество дней (остановка)": work_days,
             "Время в пути": dur_str,
             "Вид транспорта": transport_type
         })
     return pd.DataFrame(rows)
 
-# -----------------------------------------------------------------------------
-# Основная функция: объединённый запуск с интерактивным вводом и 10 маршрутами
-# -----------------------------------------------------------------------------
+# -------------------------------------------------------------------------
+# Основная функция: запуск с интерактивным вводом и поиском до 10 маршрутов
+# -------------------------------------------------------------------------
 def main():
-    logger.info("=== Запуск объединённого модуля (10 маршрутов) ===")
+    logger.info("=== Запуск объединённого модуля (до 10 маршрутов) ===")
     
     # Шаг 1: Ввод исходных данных
     params = input_route_parameters()
@@ -516,15 +588,20 @@ def main():
     date_str = params["date"]
     work_info = params.get("work_info")  # либо (work_city, work_days), либо None
 
+    # Шаг 1а: Выбор параметра ранжирования маршрутов: время или стоимость
+    ranking_param = input("По какому параметру искать оптимальный маршрут? (time/cost): ").strip().lower()
+    if ranking_param not in ("time", "cost"):
+        ranking_param = "time"
+
     # Шаг 2: Загрузка справочных данных
     df_stations, _ = load_stations_dataframe()
     df_settlements = load_settlements_dataframe()
     if df_stations.empty or df_settlements.empty:
-        logger.error("Нет справочных данных. Завершаем.")
+        logger.error("Нет справочных данных. Завершаем работу.")
         return
     logger.info(f"Всего станций: {len(df_stations)}")
-    
-    # Шаг 3: Выбор транспортных узлов (интерактивно)
+
+    # Шаг 3: Выбор транспортных узлов
     from_node = select_transport_node(city_from, df_stations, df_settlements)
     to_node = select_transport_node(city_to, df_stations, df_settlements)
     work_node = ""
@@ -540,20 +617,21 @@ def main():
 
     # Сохраняем выбранные узлы в файл
     selected_nodes = {"from_node": from_node, "to_node": to_node}
-    if work_info:
+    if work_node:
         selected_nodes["work_node"] = work_node
     with open(SELECTED_NODES_FILE, "w", encoding="utf-8") as f:
         json.dump(selected_nodes, f, ensure_ascii=False, indent=2)
     logger.info(f"Выбранные узлы сохранены в {SELECTED_NODES_FILE}")
-    
+
     print("\nИсходные данные маршрута:")
     print(f"Отправление: {city_from} -> Узел: {from_node}")
     print(f"Прибытие: {city_to} -> Узел: {to_node}")
     print(f"Дата поездки: {date_str}")
+    print(f"Ранжируем по: {ranking_param}")
     if work_info:
         print(f"Промежуточный город: {work_city} -> Узел: {work_node}, суток: {work_days}")
-    
-    # Шаг 4: Получение вариантов маршрутов через API
+
+    # Шаг 4: Получение вариантов маршрутов через API Яндекс.Расписаний
     if work_node:
         logger.info("Запрашиваем сегмент 1 (A->X)")
         route_data_1 = get_route_options(from_node, work_node, date_str)
@@ -587,10 +665,10 @@ def main():
     # Сохраняем полученные данные маршрута
     fname = f"search_{from_node}_{to_node}_{date_str}.json".replace(" ", "_")
     save_route_options(final_data, fname)
-    
-    # Шаг 5: Построение графа маршрутов
+
+    # Шаг 5: Построение графа маршрутов с учетом выбранного параметра ранжирования
     intermediate = work_node if work_node else None
-    graph = build_route_graph(final_data, intermediate_node=intermediate)
+    graph = build_route_graph(final_data, intermediate_node=intermediate, ranking_param=ranking_param)
     if graph.number_of_nodes() == 0:
         logger.error("Граф пуст. Нет валидных сегментов.")
         print("Маршрут не найден.")
@@ -608,18 +686,26 @@ def main():
         print("Маршрут не найден.")
         return
 
-    # Шаг 7: Формирование общего DataFrame с детализацией каждого маршрута
+    # Шаг 7: Формирование итогового DataFrame с детализацией каждого маршрута
     all_frames = []
-    for idx, (path_nodes, total_time) in enumerate(routes, start=1):
-        logger.info(f"[Путь #{idx}] Узлы: {path_nodes}, Время: {total_time} сек")
-        df_route = build_optimal_route_dataframe(path_nodes, graph, work_days=work_days if work_info else 0, route_id=idx)
-        df_route["Общее_время_в_сек"] = total_time
-        df_route["Общее_время_формат"] = format_duration(total_time)
+    for idx, (path_nodes, total_val) in enumerate(routes, start=1):
+        logger.info(f"[Путь #{idx}] Узлы: {path_nodes}, Вес: {total_val} ({ranking_param})")
+        df_route = build_optimal_route_dataframe(
+            path_nodes,
+            graph,
+            work_days=work_days if work_info else 0,
+            route_id=idx
+        )
+        if ranking_param == "time":
+            df_route["Общее_время_в_сек"] = total_val
+            df_route["Общее_время_формат"] = format_duration(total_val)
+        else:
+            df_route["Общая_стоимость"] = total_val
         all_frames.append(df_route)
+
     df_all = pd.concat(all_frames, ignore_index=True)
     df_all.sort_values(["Маршрут_ID", "Номер сегмента маршрута"], inplace=True)
 
-    # Выводим результат и сохраняем
     print("\n=== Найденные маршруты (до 10) ===")
     print(df_all)
     df_all.to_csv("k_shortest_paths_result.csv", index=False, encoding="utf-8")
