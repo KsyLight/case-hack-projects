@@ -58,6 +58,6 @@
   ```
 
 <div align="center">
-    <img src="cat.jpg" alt="Описание изображения" width="800" height="auto">
+    <img src="cat.jpg" alt="Описание изображения" width="1000" height="auto">
 </div>
 
