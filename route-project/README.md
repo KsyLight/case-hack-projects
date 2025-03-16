@@ -21,6 +21,7 @@
    ```
    *(Замените `path/to/your/folder` на ваш путь)*
 3. Клонировать только папку `route-project` из репозитория:
+
    ```sh
    git clone --depth 1 --filter=blob:none --sparse https://github.com/KsyLight/case-hack-projects.git
    ```
@@ -30,7 +31,7 @@
    ```sh
    git sparse-checkout set route-project
    ```
-4. Перейти в папку проекта:
+5. Перейти в папку проекта:
    ```sh
    cd route-project
    ```
