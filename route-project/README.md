@@ -57,4 +57,7 @@
   deactivate
   ```
 
-![Описание изображения](cat.jpg)
+<div align="center">
+    <img src="cat.jpg" alt="Описание изображения" width="500">
+</div>
+
