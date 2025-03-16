@@ -16,11 +16,12 @@
 
 1. Открыть терминал или командную строку.
 2. Перейти в папку, куда будет клонирован проект:
+
    ```sh
    cd path/to/your/folder
    ```
    *(Замените `path/to/your/folder` на ваш путь)*
-3. Клонировать только папку `route-project` из репозитория:
+4. Клонировать только папку `route-project` из репозитория:
 
    ```sh
    git clone --depth 1 --filter=blob:none --sparse https://github.com/KsyLight/case-hack-projects.git
@@ -32,6 +33,7 @@
    git sparse-checkout set route-project
    ```
 5. Перейти в папку проекта:
+
    ```sh
    cd route-project
    ```
@@ -39,29 +41,35 @@
 ## Основные действия
 
 5. Создать виртуальное окружение (рекомендуется):
+
    ```sh
    python -m venv route_venv
    ```
-6. Активировать виртуальное окружение:
+7. Активировать виртуальное окружение:
    - Для Windows:
+
      ```sh
      route_venv\Scripts\activate
      ```
    - Для macOS/Linux:
+
      ```sh
      source route_venv/bin/activate
      ```
-7. Установить зависимости:
+8. Установить зависимости:
+
    ```sh
    pip install -r requirements.txt
    ```
-8. Далее есть два варианта: запустить скрипт или использовать ноутбук:
+10. Далее есть два варианта: запустить скрипт или использовать ноутбук:
 - Запуск скрипта
-   ```sh
+
+  ```sh
    python route_planner.py
    ```
 - Открытие ноутбука в Jupyter Notebook (можно использовать любой другой IDE, открыв через него)
   - Запускаем Jupyter Notebook
+
   ```sh
    jupyter notebook notebook.ipynb
    ```
@@ -71,10 +79,12 @@
 ## Дополнительная информация
 
 - Если возникли проблемы с зависимостями, попробуйте обновить `pip`:
+
   ```sh
   python -m pip install --upgrade pip
   ```
 - Для выхода из виртуального окружения выполните команду:
+
   ```sh
   deactivate
   ```
